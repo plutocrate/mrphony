@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { AppState, TermLine, CaseFile, GameMap } from '../types'
 import { generateAllCases } from '../cases/generator'
 
@@ -114,7 +115,7 @@ interface Actions {
   setPathEnd:   (pt: [number, number] | null) => void
 }
 
-export const useStore = create<AppState & Actions & TutorialState & { waypoints: [number, number][] }>((set, get) => ({
+export const useStore = create<AppState & Actions & TutorialState & { waypoints: [number, number][] }>()(persist((set, get) => ({
   cwd: '/home/mrphony',
   lines: [],
   history: [],
@@ -282,6 +283,42 @@ export const useStore = create<AppState & Actions & TutorialState & { waypoints:
 
   updateCase: (caseId, upd) =>
     set(s => ({ cases: { ...s.cases, [caseId]: { ...s.cases[caseId], ...upd } } })),
+}), {
+  name: 'mrphony-cases',
+  // Only persist case statuses — maps are regenerated deterministically
+  partialize: (s) => ({
+    cases: Object.fromEntries(
+      Object.entries(s.cases).map(([id, c]) => [
+        id,
+        {
+          id: c.id, num: c.num, title: c.title,
+          status: c.status, paid: c.paid,
+          reward: c.reward,
+          pathStart: c.pathStart, pathEnd: c.pathEnd,
+          submittedAt: c.submittedAt,
+        }
+      ])
+    ),
+  }),
+  // Merge persisted case statuses back into freshly generated cases
+  merge: (persisted: any, current) => {
+    const merged = { ...current }
+    if (persisted?.cases) {
+      for (const [id, saved] of Object.entries(persisted.cases as Record<string, any>)) {
+        if (merged.cases[id]) {
+          merged.cases[id] = {
+            ...merged.cases[id],
+            status: saved.status,
+            paid: saved.paid,
+            pathStart: saved.pathStart,
+            pathEnd: saved.pathEnd,
+            submittedAt: saved.submittedAt,
+          }
+        }
+      }
+    }
+    return merged
+  },
 }))
 
 // Build a simple waypoint path for the tutorial (lerp with kinks)
