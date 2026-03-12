@@ -1,4 +1,5 @@
 import { useStore } from '../store'
+import { pauseMusic, resumeMusic, getMusicStatus } from '../music'
 import type { TermLine } from '../types'
 import { getPredictedZone } from '../simulation/engine'
 
@@ -81,6 +82,8 @@ const HELP: TermLine[] = [
   L('  pwd                    print working directory'),
   L('  cat <file>             read a file (case.txt for FIR)'),
   L('  help                   show this help'),
+  L('  music pause            pause background music'),
+  L('  music resume           resume background music'),
   L(''),
   L('  case --list            list all cases and their status', 'bold'),
   L('  case --new             receive a new open case'),
@@ -140,6 +143,14 @@ export function handleCommand(raw: string): void {
       const content = readFile(fp)
       if (content === null) { addLine(`cat: ${args[0]}: No such file`, 'error'); break }
       content.split('\n').forEach(l => addLine(l)); break
+    }
+
+    case 'music': {
+      const sub = args[0]
+      if (sub === 'pause') { addLine(pauseMusic(), 'dim'); break }
+      if (sub === 'resume') { addLine(resumeMusic(), 'dim'); break }
+      if (sub === 'status') { addLine('Music: ' + getMusicStatus(), 'dim'); break }
+      addLine("music: usage: music pause | music resume | music status", 'error'); break
     }
 
     case 'help':

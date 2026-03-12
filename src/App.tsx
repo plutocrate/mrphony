@@ -2,12 +2,16 @@ import { useRef, useEffect, useState } from 'react'
 import { useStore } from './store'
 import { Terminal } from './ui/Terminal'
 import { MapViewer } from './ui/MapViewer'
+import { initMusic } from './music'
 
 // CRT effect via CSS + WebGL canvas overlay reading from map canvas
 // For terminal (DOM), CRT is pure CSS. For map (canvas), WebGL reads the canvas.
 
 export default function App() {
   const mapOpen = useStore(s => s.mapOpen)
+
+  // Register first-gesture music start once on mount
+  useEffect(() => { initMusic() }, [])
   const offscreenRef = useRef<HTMLCanvasElement>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
 
