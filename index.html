@@ -9,10 +9,103 @@
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     html,body,#root{width:100%;height:100%;overflow:hidden;background:#000}
+
+    #boot{
+      position:fixed;inset:0;background:#000;
+      display:flex;flex-direction:column;justify-content:center;align-items:flex-start;
+      padding:8vh 10vw;
+      font-family:'Share Tech Mono','Courier New',monospace;
+      font-size:13px;color:#00cc44;
+      z-index:9999;
+      transition:opacity 0.35s ease;
+    }
+    #boot.fade{opacity:0;pointer-events:none}
+    #boot-lines{display:flex;flex-direction:column;gap:2px;width:100%}
+    #boot-lines div{line-height:1.7;min-height:1.7em;letter-spacing:0.04em}
+    .ok{color:#00aa33}.sub{color:#007722}.hdr{color:#00ff66}
+    #boot-bar-wrap{margin-top:28px}
+    #boot-label{color:#005511;letter-spacing:0.1em;margin-bottom:6px;font-size:11px}
+    #boot-bar{color:#00cc44;letter-spacing:0.05em;font-size:13px}
   </style>
 </head>
 <body>
+  <div id="boot">
+    <div id="boot-lines"></div>
+    <div id="boot-bar-wrap">
+      <div id="boot-label">LOADING SYSTEM</div>
+      <div id="boot-bar">[░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%</div>
+    </div>
+  </div>
+
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
+
+  <script>
+    // Run entirely in plain JS — no React dependency
+    var LINES = [
+      [0,   'hdr', 'BLACKLINUX v2.4.1 — UTTARAKHAND POLICE TERRAIN ANALYSIS SYSTEM'],
+      [110, '',    'Copyright (c) 2024 UP Cyber Cell, Dehradun. All rights reserved.'],
+      [200, '',    ''],
+      [300, 'hdr', 'Initialising kernel modules...'],
+      [480, 'ok',  '  [  OK  ] topo-engine.ko'],
+      [620, 'ok',  '  [  OK  ] case-registry.ko'],
+      [750, 'ok',  '  [  OK  ] terrain-renderer.ko'],
+      [870, 'ok',  '  [  OK  ] prng-seed.ko'],
+      [980, '',    ''],
+      [1060,'hdr', 'Mounting case filesystem...'],
+      [1220,'sub', '  /dev/cases  →  /home/mrphony/cases  [ext4]  OK'],
+      [1350,'sub', '  /dev/maps   →  /var/cache/maps      [tmpfs] OK'],
+      [1470,'',    ''],
+      [1550,'hdr', 'Loading officer credentials...'],
+      [1680,'ok',  '  Badge #4471 authenticated.'],
+      [1780,'',    ''],
+      [1850,'hdr', 'Running self-test...'],
+      [1960,'ok',  '  RAM: OK  |  DISK: OK  |  NOISE: OK  |  BFS: OK'],
+      [2080,'',    ''],
+      [2160,'hdr', 'System ready. Starting shell...'],
+      [2260,'',    ''],
+    ];
+    var TOTAL = 2900;
+    var BAR_W = 38;
+    var el = document.getElementById('boot-lines');
+    var barEl = document.getElementById('boot-bar');
+    var bootEl = document.getElementById('boot');
+
+    // Print lines
+    LINES.forEach(function(l){
+      setTimeout(function(){
+        var d = document.createElement('div');
+        if(l[1]) d.className = l[1];
+        d.textContent = l[2];
+        el.appendChild(d);
+        // keep scroll at bottom
+        el.scrollTop = el.scrollHeight;
+      }, l[0]);
+    });
+
+    // Smooth progress bar
+    var start = Date.now();
+    var raf;
+    function tick(){
+      var p = Math.min(1, (Date.now()-start)/TOTAL);
+      var filled = Math.round(p*BAR_W);
+      var pct = ('  '+Math.round(p*100)).slice(-3)+'%';
+      barEl.textContent = '[' + '█'.repeat(filled) + '░'.repeat(BAR_W-filled) + '] ' + pct;
+      if(p < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+
+    // Signal React that boot is done — React polls this flag
+    setTimeout(function(){
+      cancelAnimationFrame(raf);
+      barEl.textContent = '[' + '█'.repeat(BAR_W) + '] 100%';
+      window.__BOOT_DONE__ = true;
+      // Fade out after React is likely ready
+      setTimeout(function(){
+        bootEl.classList.add('fade');
+        setTimeout(function(){ bootEl.style.display='none'; }, 400);
+      }, 300);
+    }, TOTAL);
+  </script>
 </body>
 </html>

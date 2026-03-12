@@ -146,14 +146,14 @@ const TOWNS = [
   'Jhala','Sukhi','Sangla','Chitkul','Kalpa','Urni','Reckong','Naugaon','Uttarkashi',
 ]
 
-export function generateMap(seed: number, complexity = 0.5, W = 300, H = 200): GameMap {
+export function generateMap(seed: number, complexity = 0.5, W = 220, H = 150): GameMap {
   const rng = mkRng(seed)
   const N = W * H
 
-  const octaves = 5 + Math.floor(complexity * 5)
-  const erosionIters = Math.floor(500 + complexity * 2000)
-  const numRivers = 6 + Math.floor(complexity * 10)
-  const numNalas = 6 + Math.floor(complexity * 12)
+  const octaves = 4 + Math.floor(complexity * 3)
+  const erosionIters = Math.floor(80 + complexity * 400)
+  const numRivers = 4 + Math.floor(complexity * 6)
+  const numNalas = 4 + Math.floor(complexity * 7)
   const numCities = 4 + Math.floor(complexity * 4)
   const numVillages = 12 + Math.floor(complexity * 20)
   const warpStr = 0.8 + complexity * 2.2
@@ -171,11 +171,10 @@ export function generateMap(seed: number, complexity = 0.5, W = 300, H = 200): G
     for (let x = 0; x < W; x++) {
       const i = y * W + x
       const nx = x * sc, ny = y * sc
-      const base = elevNoise.warp(nx, ny, octaves, warpStr)
-      const ridge = 1 - Math.abs(ridgeNoise.fbm(nx*0.7, ny*0.7, Math.min(octaves,7)))
-      const detail = detailNoise.fbm(nx*2, ny*2, 3) * 0.12
-      elev[i] = (base*0.62 + ridge*0.28 + detail + 1) * 0.48
-      moist[i] = (moistNoise.fbm(nx+40, ny+30, Math.min(octaves,6)) + 1) * 0.5
+      const base = elevNoise.warp(nx, ny, Math.min(octaves, 6), warpStr)
+      const ridge = 1 - Math.abs(ridgeNoise.fbm(nx*0.7, ny*0.7, Math.min(octaves,5)))
+      elev[i] = (base*0.68 + ridge*0.32 + 1) * 0.48
+      moist[i] = (moistNoise.fbm(nx+40, ny+30, Math.min(octaves,4)) + 1) * 0.5
     }
   }
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AppState, TermLine, CaseFile, GameMap } from '../types'
-import { generateAllCases } from '../cases/generator'
+import { generateAllCases, getMapForCase } from '../cases/generator'
 
 let lineId = 0
 function ln(text: string, cls: TermLine['cls'] = 'normal'): TermLine {
@@ -82,7 +82,7 @@ function generateFeedback(hit: boolean, actual: { x: number; y: number }, waypoi
 export const TRAIL_BUFFER = 4
 export const MAX_TRAIL_TILES = 25
 
-const { cases: caseList, maps } = generateAllCases()
+const { cases: caseList } = generateAllCases()
 const casesMap: Record<string, CaseFile> = {}
 caseList.forEach(c => { casesMap[c.id] = c })
 
@@ -121,7 +121,7 @@ export const useStore = create<AppState & Actions & TutorialState & { waypoints:
   history: [],
   histIdx: -1,
   cases: casesMap,
-  maps,
+  maps: {},
   mapOpen: false,
   activeCaseId: null,
   pathStart: null,
@@ -149,24 +149,23 @@ export const useStore = create<AppState & Actions & TutorialState & { waypoints:
     const allCases = get().cases
     let c = allCases[caseId]
     if (!c) return
-    const map = get().maps[`map_${caseId}`]
+    // Generate map lazily on first open (cached after that)
+    const map = getMapForCase(caseId)
     if (!map) return
-    // Always allow reopening — reset to open if previously failed/solved
-    // (so player can retry)
-    if (c.status === 'failed') {
-      set(s => ({
-        cases: { ...s.cases, [caseId]: { ...c!, status: 'open', paid: false, pathStart: undefined, pathEnd: undefined, submittedAt: undefined } }
-      }))
-      c = { ...c, status: 'open' }
-    }
-    set({
+    // Reset failed cases and open map in one atomic set
+    const updatedCase = c.status === 'failed'
+      ? { ...c, status: 'open' as const, paid: false, pathStart: undefined, pathEnd: undefined, submittedAt: undefined }
+      : c
+    set(s => ({
+      maps: { ...s.maps, [`map_${caseId}`]: map },
+      cases: { ...s.cases, [caseId]: updatedCase },
       mapOpen: true, activeCaseId: caseId,
       pathStart: null, pathEnd: null, pathError: null,
       waypoints: [],
-      viewX: Math.max(0, c.subject.lastSeenX - 20),
-      viewY: Math.max(0, c.subject.lastSeenY - 15),
-      zoom: 1
-    })
+      viewX: Math.max(0, updatedCase.subject.lastSeenX - 20),
+      viewY: Math.max(0, updatedCase.subject.lastSeenY - 15),
+      zoom: 1,
+    }))
   },
   closeMap: () => set({ mapOpen: false }),
 
@@ -212,7 +211,7 @@ export const useStore = create<AppState & Actions & TutorialState & { waypoints:
     const c = get().cases['case0']
     if (c && tutorialStep >= WAYPOINT_REVEAL_START) {
       const sub = c.subject
-      const map = get().maps['map_case0']
+      const map = getMapForCase('case0')
       if (map) {
         const fullPath = getTutorialPath(sub.lastSeenX, sub.lastSeenY, sub.actualX, sub.actualY)
         const wpIdx = tutorialStep - WAYPOINT_REVEAL_START

@@ -161,6 +161,32 @@ function fir(s:Subject, w:Weather, n:number, rng:()=>number, map: GameMap):strin
   ].join('\n')
 }
 
+// Cache for lazily generated maps
+const mapCache: Record<string, GameMap> = {}
+
+export function getMapForCase(caseId: string): GameMap | null {
+  if (mapCache[caseId]) return mapCache[caseId]
+
+  if (caseId === 'case0') {
+    const tutMap = generateMap(9999, 0.2)
+    tutMap.id = 'map_case0'
+    mapCache['map_case0'] = tutMap
+    mapCache['case0'] = tutMap
+    return tutMap
+  }
+
+  const n = parseInt(caseId.replace('case', ''))
+  if (isNaN(n) || n < 1 || n > 50) return null
+
+  const complexity = 0.1 + ((n - 1) / 49) * 0.9
+  const seed = 1000 + n * 1597
+  const map = generateMap(seed, complexity)
+  map.id = `map_case${n}`
+  mapCache[`map_case${n}`] = map
+  mapCache[caseId] = map
+  return map
+}
+
 export function generateAllCases():{cases:CaseFile[], maps:Record<string,GameMap>} {
   const cases:CaseFile[]=[], maps:Record<string,GameMap>={}
 
@@ -168,10 +194,7 @@ export function generateAllCases():{cases:CaseFile[], maps:Record<string,GameMap
     const rng=mkRng(n*1597+12347)
     // Complexity increases with case number: case1=0.1, case50=1.0
     const complexity=0.1+((n-1)/49)*0.9
-    const seed=1000+n*1597
-    const map=generateMap(seed, complexity)
-    map.id=`map_case${n}`
-    maps[map.id]=map
+    const map=getMapForCase(`case${n}`)!  // uses cache, generates lazily
 
     const W=map.width, H=map.height
     const type=TYPES[n%TYPES.length]
@@ -277,5 +300,5 @@ export function generateAllCases():{cases:CaseFile[], maps:Record<string,GameMap
     subject: tutSub, weather: 'clear', reward: 0, status: 'open', paid: false,
   })
 
-  return {cases,maps}
+  return {cases, maps: {}}  // maps are lazy — use getMapForCase()
 }
