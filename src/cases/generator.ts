@@ -106,7 +106,6 @@ export function generateAllCases():{cases:CaseFile[], maps:Record<string,GameMap
       subject:sub,weather,
       reward:type==='fugitive'?50000:10000,
       status:'open',paid:false,
-      createdAt:new Date(Date.now()-hours*3600000).toISOString()
     })
   }
   // Tutorial case0
