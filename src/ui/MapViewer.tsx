@@ -6,18 +6,36 @@ import type { Tile, TSym } from '../types'
 const BASE_TS = 10
 
 const BG: Record<TSym, string> = {
-  '^': '#7a7a6a', 'M': '#5a5a4c', 'H': '#686858', '|': '#4a4a3e', 'O': '#3e2e24',
-  'T': '#123612', 't': '#1e3e14', 'P': '#1e4a16', '.': '#364830', ',': '#5a6e3a',
-  '~': '#083a6a', '-': '#0e2e50', 'D': '#7a6a4a', 'L': '#062040', 'S': '#12281a',
-  '#': '#4e4638', '=': '#3c342c', 'f': '#2e2820', 'R': '#282860', 'B': '#7a5c30',
-  'C': '#9a7838', 'W': '#183a52', 'G': '#5c2838', 'E': '#1e2828', 'X': '#bb2200',
+  // Peaks & mountains — cold grey/blue stone
+  '^': '#9a9a8a', 'M': '#7a7a6c', 'H': '#8a8070', '|': '#5a5248', 'O': '#4a3c30',
+  // Forest — rich greens
+  'T': '#0d4a0d', 't': '#1a5c14', 'P': '#1e6b1a',
+  // Open ground — warm earth tones
+  '.': '#7a7050', ',': '#6a8a2a',
+  // Water — vivid blues (most important fix)
+  '~': '#1565c0', '-': '#1976d2', 'D': '#b8860b', 'L': '#0d47a1', 'S': '#2e7d32',
+  // Roads & infrastructure
+  '#': '#5d4e37', '=': '#6b5744', 'f': '#4a3d2e', 'R': '#1a1a4e',
+  // Settlements — warm terracotta/amber
+  'B': '#8b4513', 'C': '#a0522d',
+  // Points of interest
+  'W': '#0d47a1', 'G': '#6a1520', 'E': '#1a2a1a', 'X': '#cc1100',
 }
 const FG: Record<TSym, string> = {
-  '^': '#e8e8cc',  'M': '#ccccbb', 'H': '#ddddcc', '|': '#bbbbaa', 'O': '#ffcc88',
-  'T': '#55ee44',  't': '#88cc55', 'P': '#77ee55', '.': '#aaccaa', ',': '#eeff99',
-  '~': '#66ccff',  '-': '#88bbee', 'D': '#eebb88', 'L': '#44aaff', 'S': '#77cc88',
-  '#': '#ffeecc',  '=': '#ddbbaa', 'f': '#cc9988', 'R': '#ccccff', 'B': '#ffe0aa',
-  'C': '#ffee88',  'W': '#77eeff', 'G': '#ffaabb', 'E': '#aaffee', 'X': '#ff3300',
+  // Peaks — bright snow/grey
+  '^': '#f0f0e0', 'M': '#d8d8c8', 'H': '#e8e0cc', '|': '#c8c0b0', 'O': '#ffcc88',
+  // Forest — bright lime/yellow-green chars visible on dark bg
+  'T': '#5dde44', 't': '#7ed44e', 'P': '#88ee55',
+  // Ground
+  '.': '#c8b878', ',': '#d4e860',
+  // Water — bright cyan/white so text readable on blue
+  '~': '#82cfff', '-': '#64b5f6', 'D': '#f0c040', 'L': '#40c4ff', 'S': '#69f069',
+  // Roads
+  '#': '#f5deb3', '=': '#deb887', 'f': '#c4a882', 'R': '#a0a8ff',
+  // Settlements — bright yellow/white on dark terracotta
+  'B': '#ffd59e', 'C': '#fff0b0',
+  // Points of interest
+  'W': '#40d4ff', 'G': '#ff90a0', 'E': '#80ffcc', 'X': '#ff2200',
 }
 
 const LEGEND: {sym:TSym; label:string}[] = [
