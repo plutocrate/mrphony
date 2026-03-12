@@ -89,10 +89,32 @@ function drawMap(
   ctx.fillStyle = '#020902'
   ctx.fillRect(0, 0, cw, ch)
 
-  const x0 = Math.max(0, offX | 0)
-  const y0 = Math.max(0, offY | 0)
-  const x1 = Math.min(W, x0 + Math.ceil(cw / ts) + 2)
-  const y1 = Math.min(H, y0 + Math.ceil(ch / ts) + 2)
+  // Fill edges with seamless edge-tile color so no black gap ever shows
+  const edgeFill = (px: number, py: number, sx: number, sy: number) => {
+    // clamp to nearest valid tile
+    const ex = Math.max(0, Math.min(W-1, sx | 0))
+    const ey = Math.max(0, Math.min(H-1, sy | 0))
+    const et = tiles[ey]?.[ex]
+    if (!et) return
+    ctx.fillStyle = BG[et.sym] ?? '#111'
+    ctx.fillRect(px, py, ts, ts)
+  }
+
+  const x0 = offX | 0
+  const y0 = offY | 0
+  const x1 = x0 + Math.ceil(cw / ts) + 2
+  const y1 = y0 + Math.ceil(ch / ts) + 2
+
+  // Draw edge-fill for out-of-bounds tiles
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      if (x < 0 || x >= W || y < 0 || y >= H) {
+        const px = (x - offX) * ts
+        const py = (y - offY) * ts
+        edgeFill(px, py, x, y)
+      }
+    }
+  }
 
   const fs = Math.max(5, ts - 2)
   ctx.font = `${fs}px 'Share Tech Mono',monospace`
@@ -101,6 +123,7 @@ function drawMap(
 
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
+      if (x < 0 || x >= W || y < 0 || y >= H) continue
       const t = tiles[y]?.[x]; if (!t) continue
       const px = (x - offX) * ts
       const py = (y - offY) * ts
@@ -293,9 +316,9 @@ export function MapViewer({ sourceRef }: { sourceRef: React.RefObject<HTMLCanvas
       if (!store.mapOpen) return
       const step = 5
       switch(e.key) {
-        case 'ArrowLeft':  store.setView(Math.max(0,store.viewX-step), store.viewY); e.preventDefault(); return
+        case 'ArrowLeft':  store.setView(store.viewX-step, store.viewY); e.preventDefault(); return
         case 'ArrowRight': store.setView(store.viewX+step, store.viewY); e.preventDefault(); return
-        case 'ArrowUp':    store.setView(store.viewX, Math.max(0,store.viewY-step)); e.preventDefault(); return
+        case 'ArrowUp':    store.setView(store.viewX, store.viewY-step); e.preventDefault(); return
         case 'ArrowDown':  store.setView(store.viewX, store.viewY+step); e.preventDefault(); return
         case '+': case '=': store.setView(store.viewX, store.viewY, store.zoom*1.15); return
         case '-':            store.setView(store.viewX, store.viewY, store.zoom/1.15); return
@@ -330,8 +353,8 @@ export function MapViewer({ sourceRef }: { sourceRef: React.RefObject<HTMLCanvas
       isDragging.current = true
       const ts = BASE_TS * store.zoom
       store.setView(
-        Math.max(0, drag.current.ox - (e.clientX - drag.current.mx) / ts),
-        Math.max(0, drag.current.oy - (e.clientY - drag.current.my) / ts),
+        drag.current.ox - (e.clientX - drag.current.mx) / ts,
+        drag.current.oy - (e.clientY - drag.current.my) / ts,
       )
     }
   }
@@ -365,8 +388,8 @@ export function MapViewer({ sourceRef }: { sourceRef: React.RefObject<HTMLCanvas
     } else {
       const ts = BASE_TS * store.zoom
       store.setView(
-        Math.max(0, store.viewX + e.deltaX / ts),
-        Math.max(0, store.viewY + e.deltaY / ts),
+        store.viewX + e.deltaX / ts,
+        store.viewY + e.deltaY / ts,
       )
     }
   }

@@ -146,16 +146,16 @@ const TOWNS = [
   'Jhala','Sukhi','Sangla','Chitkul','Kalpa','Urni','Reckong','Naugaon','Uttarkashi',
 ]
 
-export function generateMap(seed: number, complexity = 0.5, W = 140, H = 96): GameMap {
+export function generateMap(seed: number, complexity = 0.5, W = 300, H = 200): GameMap {
   const rng = mkRng(seed)
   const N = W * H
 
   const octaves = 5 + Math.floor(complexity * 5)
   const erosionIters = Math.floor(500 + complexity * 2000)
-  const numRivers = 3 + Math.floor(complexity * 7)
-  const numNalas = 3 + Math.floor(complexity * 8)
-  const numCities = 2 + Math.floor(complexity * 2)
-  const numVillages = 5 + Math.floor(complexity * 12)
+  const numRivers = 6 + Math.floor(complexity * 10)
+  const numNalas = 6 + Math.floor(complexity * 12)
+  const numCities = 4 + Math.floor(complexity * 4)
+  const numVillages = 12 + Math.floor(complexity * 20)
   const warpStr = 0.8 + complexity * 2.2
 
   const elevNoise = new Noise2D(seed)
