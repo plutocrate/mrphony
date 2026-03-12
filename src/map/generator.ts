@@ -190,30 +190,107 @@ export function generateMap(seed: number, complexity = 0.5, W = 220, H = 150): G
     }
   }
 
+  // ── Rivers: variable width based on elevation (wider lower down) ────────
   const riverM = new Array(N).fill(false)
+  const riverWidth = new Float32Array(N) // 0=no river, >0=width factor
   for (let r = 0; r < numRivers; r++) {
-    const rv = carveRiver(elev, W, H, rng, true)
-    for (let i = 0; i < N; i++) if (rv[i]) riverM[i] = true
+    const rv = carveRiver(elev, W, H, rng, false) // carve centerline only
+    // Widen river progressively — lower elevation = wider
+    for (let i = 0; i < N; i++) {
+      if (!rv[i]) continue
+      const e = elev[i]
+      // Width: 0 tiles at source (e>0.6), up to 3 tiles at lowlands (e<0.15)
+      const w = e > 0.60 ? 0
+              : e > 0.45 ? 1
+              : e > 0.30 ? 2
+              : 3
+      const cx = i % W, cy = i / W | 0
+      for (let dy = -w; dy <= w; dy++) {
+        for (let dx = -w; dx <= w; dx++) {
+          if (Math.hypot(dx, dy) > w + 0.5) continue
+          const nx = cx+dx, ny = cy+dy
+          if (nx<0||nx>=W||ny<0||ny>=H) continue
+          const ni = ny*W+nx
+          riverM[ni] = true
+          riverWidth[ni] = Math.max(riverWidth[ni], w)
+        }
+      }
+    }
   }
 
+  // ── Nalas (seasonal streams): thin, no widening ──────────────────────────
   const nalaM = new Array(N).fill(false)
   for (let r = 0; r < numNalas; r++) {
     const rv = carveRiver(elev, W, H, rng, false)
     for (let i = 0; i < N; i++) if (rv[i] && !riverM[i]) nalaM[i] = true
   }
 
+  // ── Dry sandy riverbeds: old nala paths in low-moisture zones ────────────
   const dryM = new Array(N).fill(false)
   for (let i = 0; i < N; i++) {
     if (!riverM[i]&&!nalaM[i]&&moist[i]<0.26&&elev[i]<0.32&&slope[i]<7)
       if (rng()<0.05) dryM[i]=true
   }
 
+  // ── Lakes: flood-fill from lowest basins outward ─────────────────────────
   const lakeM = new Array(N).fill(false)
-  for (let i = 0; i < N; i++) if (elev[i]<0.05&&!riverM[i]) lakeM[i]=true
+  const numLakes = 2 + Math.floor(complexity * 4)
+  // Find basin seeds — very low elevation, not on river
+  const basinSeeds: number[] = []
+  for (let i = 0; i < N; i++) {
+    if (elev[i] < 0.08 && !riverM[i] && slope[i] < 4) basinSeeds.push(i)
+  }
+  // Pick random seeds and flood-fill to create lakes of varying size
+  const usedLake = new Set<number>()
+  for (let l = 0; l < numLakes && basinSeeds.length > 0; l++) {
+    const si = basinSeeds[Math.floor(rng() * basinSeeds.length)]
+    if (usedLake.has(si)) continue
+    const targetSize = 4 + Math.floor(rng() * 40) // 4–44 tiles
+    const queue = [si]
+    const visited = new Set([si])
+    let head = 0
+    while (head < queue.length && visited.size < targetSize) {
+      const ci = queue[head++]
+      const cx = ci%W, cy = ci/W|0
+      for (const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]] as [number,number][]) {
+        const nx=cx+dx, ny=cy+dy
+        if (nx<0||nx>=W||ny<0||ny>=H) continue
+        const ni=ny*W+nx
+        if (visited.has(ni)) continue
+        if (elev[ni] < 0.14 && !riverM[ni]) {
+          visited.add(ni); queue.push(ni)
+        }
+      }
+    }
+    for (const i of visited) { lakeM[i]=true; usedLake.add(i) }
+  }
+  // Also mark very low elevations as lake
+  for (let i = 0; i < N; i++) if (elev[i]<0.04&&!riverM[i]) lakeM[i]=true
 
+  // ── Small ponds: isolated 2-6 tile water bodies near villages ────────────
+  const pondM = new Array(N).fill(false)
+  const numPonds = 6 + Math.floor(complexity * 10)
+  for (let p = 0; p < numPonds * 30 && p < 300; p++) {
+    const cx = 5+(rng()*(W-10)|0), cy = 5+(rng()*(H-10)|0)
+    const i = cy*W+cx
+    if (riverM[i]||lakeM[i]||nalaM[i]) continue
+    if (elev[i]>0.35||slope[i]>8) continue
+    const r = 1 + (rng() < 0.4 ? 1 : 0) // radius 1 or 2
+    let added = false
+    for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++) {
+      const nx=cx+dx, ny=cy+dy
+      if (nx<0||nx>=W||ny<0||ny>=H) continue
+      const ni=ny*W+nx
+      if (!riverM[ni]&&!lakeM[ni]) { pondM[ni]=true; added=true }
+    }
+    if (added) p += 8 // count as used so we don't over-place
+  }
+
+  // ── Swamps: broad wet lowland zones ──────────────────────────────────────
   const swampM = new Array(N).fill(false)
   for (let i = 0; i < N; i++) {
-    if (!riverM[i]&&!lakeM[i]&&moist[i]>0.72&&elev[i]<0.20&&slope[i]<5) swampM[i]=true
+    if (!riverM[i]&&!lakeM[i]&&!pondM[i]&&moist[i]>0.72&&elev[i]<0.20&&slope[i]<5)
+      swampM[i]=true
   }
 
   // ── Cities: multi-tile sprawl ────────────────────────────────────────────
@@ -335,7 +412,7 @@ export function generateMap(seed: number, complexity = 0.5, W = 220, H = 150): G
   for (let i = 0; i < N; i++) if (slope[i]>44&&elev[i]>0.46&&rng()<0.008) caveM[i]=true
 
   // Distance fields
-  const waterB = riverM.map((v,i) => v||nalaM[i]||lakeM[i]||swampM[i])
+  const waterB = riverM.map((v,i) => v||nalaM[i]||lakeM[i]||swampM[i]||pondM[i])
   const pathB = roadM.map((v,i) => v||unmetM[i]||footM[i]||railM[i])
   const waterDist = bfs(waterB, W, H)
   const roadDist = bfs(pathB, W, H)
@@ -371,6 +448,7 @@ export function generateMap(seed: number, complexity = 0.5, W = 220, H = 150): G
       else if (templeM[i])                                      sym = 'G'
       else if (caveM[i])                                        sym = 'O'
       else if (lakeM[i])                                        sym = 'L'
+      else if (pondM[i])                                        sym = 'L'  // pond = small lake tile
       else if (swampM[i])                                       sym = 'S'
       else if (riverM[i])                                       sym = '~'
       else if (nalaM[i])                                        sym = '-'

@@ -106,8 +106,19 @@ export function findActualLocation(map: GameMap, sub: Subject, wx: Weather): { x
           w *= p.cliffRisk * 0.1
         }
 
-        // ── Water attraction ─────────────────────────────────────────────
-        if (t.waterDist < 8) w *= 1 + p.waterBias * (1 - t.waterDist / 8)
+        // ── Water attraction — stronger for large bodies, weaker for tiny ──
+        // waterDist=0 means ON the water tile (river/lake/pond)
+        // Children strongly attracted; elderly/adults drink but don't wade in
+        if (t.waterDist < 10) {
+          const waterPull = p.waterBias * (1 - t.waterDist / 10)
+          // Standing ON water tile = impassable lake/river — skip via walkable check
+          // Being NEXT TO large water (dist 1-2) is a strong attractor
+          const proximity = t.waterDist <= 2 ? 1.0 : (1 - t.waterDist / 10)
+          w *= 1 + waterPull * proximity
+        }
+        // Avoid crossing wide rivers (riverWidth indicator: non-walkable ~ tiles filtered above)
+        // Shallow nalas (-) are crossable and attractive to everyone
+        if (t.sym === '-' || t.sym === 'D') w *= 1 + p.waterBias * 0.8
 
         // ── Village / town: all non-fugitives attracted ──────────────────
         if ((t.sym === 'B' || t.sym === 'C') && p.roadFlee < 0.5) w *= 2.5

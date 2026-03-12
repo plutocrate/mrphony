@@ -26,14 +26,15 @@ const OFFICERS=['Sub-Inspector Tarun Bisht','Inspector Deepak Negi','SI Harish R
 
 // Scan tiles around last-seen position and return dominant features
 function scanTerrain(map: GameMap, x: number, y: number, radius = 6): {
-  nearWater: boolean, nearRiver: boolean, nearForest: boolean,
-  nearRoad: boolean, nearCliff: boolean, nearVillage: boolean,
+  nearWater: boolean, nearRiver: boolean, nearLake: boolean, nearNala: boolean,
+  nearForest: boolean, nearRoad: boolean, nearCliff: boolean, nearVillage: boolean,
   nearCultivated: boolean, nearTemple: boolean, nearOpen: boolean,
-  dominantTerrain: string,
+  waterBodyDesc: string, dominantTerrain: string,
 } {
   const W = map.width, H = map.height
   const counts: Record<string, number> = {}
-  let nearWater=false, nearRiver=false, nearForest=false, nearRoad=false
+  let nearWater=false, nearRiver=false, nearLake=false, nearNala=false
+  let nearForest=false, nearRoad=false
   let nearCliff=false, nearVillage=false, nearCultivated=false, nearTemple=false, nearOpen=false
 
   for (let dy=-radius; dy<=radius; dy++) {
@@ -43,8 +44,10 @@ function scanTerrain(map: GameMap, x: number, y: number, radius = 6): {
       if (nx<0||nx>=W||ny<0||ny>=H) continue
       const sym = map.tiles[ny][nx].sym
       counts[sym] = (counts[sym]||0) + 1
-      if (sym==='~'||sym==='L') { nearWater=true; nearRiver=(sym==='~') }
-      if (sym==='-'||sym==='D'||sym==='S') nearWater=true
+      if (sym==='~') { nearWater=true; nearRiver=true }
+      if (sym==='L') { nearWater=true; nearLake=true }
+      if (sym==='-') { nearWater=true; nearNala=true }
+      if (sym==='D'||sym==='S') nearWater=true
       if (sym==='T'||sym==='t'||sym==='P') nearForest=true
       if (sym==='#'||sym==='='||sym==='f'||sym==='R') nearRoad=true
       if (sym==='|'||sym==='^'||sym==='M') nearCliff=true
@@ -54,6 +57,17 @@ function scanTerrain(map: GameMap, x: number, y: number, radius = 6): {
       if (sym==='.') nearOpen=true
     }
   }
+
+  const riverTiles = counts['~'] || 0
+  const lakeTiles  = counts['L'] || 0
+  const nalaTiles  = counts['-'] || 0
+  const waterBodyDesc =
+    lakeTiles > 12  ? 'large lake / reservoir' :
+    lakeTiles > 3   ? 'small pond or tank' :
+    riverTiles > 8  ? 'wide perennial river' :
+    riverTiles > 2  ? 'perennial stream' :
+    nalaTiles > 4   ? 'seasonal nala' :
+    nearWater       ? 'water source' : 'none'
 
   // Find most common terrain type
   const terrainOrder = ['T','t','P',',','.','H','M','^','~','-','D','L','S']
@@ -69,8 +83,8 @@ function scanTerrain(map: GameMap, x: number, y: number, radius = 6): {
     '-':'seasonal nala area','D':'dry riverbed','L':'lake shore','S':'marshy wetland'
   }
 
-  return { nearWater, nearRiver, nearForest, nearRoad, nearCliff, nearVillage,
-           nearCultivated, nearTemple, nearOpen,
+  return { nearWater, nearRiver, nearLake, nearNala, nearForest, nearRoad, nearCliff,
+           nearVillage, nearCultivated, nearTemple, nearOpen, waterBodyDesc,
            dominantTerrain: dominantNames[dominant] || 'mixed terrain' }
 }
 
@@ -110,11 +124,17 @@ function fir(s:Subject, w:Weather, n:number, rng:()=>number, map: GameMap):strin
   let activity: string
   let terrainDesc: string
 
-  if (terrain.nearRiver) {
-    activity = `was last seen walking toward the river bank to ${['fetch water','wash clothes','water cattle'][n%3]}`
-    terrainDesc = 'The area has perennial water sources and dense riverine vegetation.'
-  } else if (terrain.nearWater) {
-    activity = `went to the seasonal nala to ${['fetch water','tend cattle','collect reeds'][n%3]} and did not return`
+  if (terrain.nearLake && terrain.waterBodyDesc.includes('large')) {
+    activity = `was last seen walking toward the ${terrain.waterBodyDesc} to ${['fetch water','wash clothes','tend cattle near the shore'][n%3]}`
+    terrainDesc = `The area borders a ${terrain.waterBodyDesc}. Shore terrain is steep in places.`
+  } else if (terrain.nearLake) {
+    activity = `went to the ${terrain.waterBodyDesc} ${['to collect water','for the cattle to drink','to wash utensils'][n%3]} and did not return`
+    terrainDesc = `There is a ${terrain.waterBodyDesc} near the last known position.`
+  } else if (terrain.nearRiver) {
+    activity = `was last seen walking toward the ${terrain.waterBodyDesc} to ${['fetch water','wash clothes','water cattle'][n%3]}`
+    terrainDesc = `The area has a ${terrain.waterBodyDesc} with dense riverine vegetation.`
+  } else if (terrain.nearNala || terrain.nearWater) {
+    activity = `went to the ${terrain.waterBodyDesc} to ${['fetch water','tend cattle','collect reeds'][n%3]} and did not return`
     terrainDesc = 'The area has seasonal streams and wet ground making tracking difficult.'
   } else if (terrain.nearForest && terrain.nearCultivated) {
     activity = `went to collect ${['firewood from the forest edge','medicinal herbs near the treeline','grass for cattle at the field margin'][n%3]}`
