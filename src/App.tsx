@@ -4,8 +4,52 @@ import { Terminal } from './ui/Terminal'
 import { MapViewer } from './ui/MapViewer'
 import { initMusic } from './music'
 
+function isMobile(): boolean {
+  return /android|iphone|ipad|ipod|blackberry|windows phone|mobile/i.test(navigator.userAgent)
+    || window.innerWidth < 768
+}
+
 // CRT effect via CSS + WebGL canvas overlay reading from map canvas
 // For terminal (DOM), CRT is pure CSS. For map (canvas), WebGL reads the canvas.
+
+function MobileBlock() {
+  return (
+    <div style={{
+      width: '100vw', height: '100vh',
+      background: '#000',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Share Tech Mono', 'Courier New', monospace",
+      padding: '32px',
+      boxSizing: 'border-box',
+    }}>
+      <div style={{ color: '#1a1a1a', fontSize: '13px', marginBottom: '48px', letterSpacing: '0.2em' }}>
+        BLACKLINUX TERRAIN ANALYSIS SYSTEM
+      </div>
+      <div style={{
+        color: '#cc0000',
+        fontSize: 'clamp(11px, 3.5vw, 15px)',
+        letterSpacing: '0.25em',
+        textTransform: 'uppercase',
+        lineHeight: 2.2,
+        textAlign: 'center',
+      }}>
+        <div>ACCESS DENIED</div>
+        <div style={{ color: '#333', margin: '16px 0', fontSize: '10px' }}>————————————————</div>
+        <div style={{ color: '#555', fontSize: 'clamp(9px, 2.8vw, 12px)', letterSpacing: '0.15em', lineHeight: 2.4 }}>
+          <div>this terminal does not run</div>
+          <div>on handheld devices.</div>
+          <div style={{ margin: '12px 0' }} />
+          <div>get back to your computer</div>
+          <div>to access the server.</div>
+        </div>
+      </div>
+      <div style={{ color: '#1a1a1a', fontSize: '11px', marginTop: '48px', letterSpacing: '0.15em' }}>
+        — UTTARAKHAND POLICE BLACKLINUX —
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   const mapOpen = useStore(s => s.mapOpen)
@@ -20,6 +64,8 @@ export default function App() {
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
+
+  if (isMobile()) return <MobileBlock />
 
   return (
     <div style={{ width:'100vw', height:'100vh', overflow:'hidden', position:'relative', background:'#010801' }}>
