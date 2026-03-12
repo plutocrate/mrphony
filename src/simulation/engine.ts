@@ -1,22 +1,16 @@
 import type { GameMap, Subject, SubjectType, Weather } from '../types'
 
-// ─── Deterministic seeded PRNG ────────────────────────────────────────────────
 function mkRng(seed: number) {
   let s = (seed ^ 0xdeadbeef) >>> 0
   return () => { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return (s >>> 0) / 4294967296 }
 }
 
-// ─── Behaviour profiles — every weight is deterministic per subject type ─────
-// These encode actual SAR (Search And Rescue) field research statistics:
-// - P(stay on trail): hiker=90%, child=20%, elderly=95%, fugitive=5%
-// - Attraction to water: children strongly attracted, elderly moderate
-// - Downhill tendency: all lost subjects tend downhill due to gravity/gravity of habitation
-// - Cover seeking: fugitives actively hide in dense vegetation
 interface Profile {
   trailBias:    number  // 0-1 weight toward roads/paths
   downBias:     number  // 0-1 weight toward lower elevation
   waterBias:    number  // 0-1 attraction to water sources
-  coverBias:    number  // 0-1 preference for forest/vegetation
+  coverBias:    number  // 0-1 preference for forest (positive = attracted, negative = repelled)
+  forestPenalty:number  // multiplier applied to dense forest tiles (< 1 = avoid)
   roadFlee:     number  // 0-1 flee from roads (fugitive only)
   panic:        number  // 0-1 chaotic random movement component
   kmph:         number  // base travel speed km/h
@@ -25,12 +19,17 @@ interface Profile {
   fatigue:      number  // speed multiplier reduction per hour
 }
 
+// SAR research-backed profiles:
+// Elderly: 92% stay on trails, almost never enter dense forest voluntarily,
+//          strong downhill bias, low panic, very low speed
+// Child:   attracted to water, will enter any terrain, high panic/randomness
+// Fugitive: actively seeks dense cover, flees all roads
 const PROFILES: Record<SubjectType, Profile> = {
-  adult_male:   { trailBias:.68, downBias:.52, waterBias:.30, coverBias:.15, roadFlee:.00, panic:.12, kmph:3.8, cliffRisk:.08, nightPenalty:.25, fatigue:.04 },
-  adult_female: { trailBias:.74, downBias:.57, waterBias:.38, coverBias:.18, roadFlee:.00, panic:.14, kmph:3.2, cliffRisk:.04, nightPenalty:.28, fatigue:.05 },
-  child:        { trailBias:.15, downBias:.10, waterBias:.75, coverBias:.55, roadFlee:.00, panic:.72, kmph:1.6, cliffRisk:.25, nightPenalty:.55, fatigue:.08 },
-  elderly:      { trailBias:.92, downBias:.70, waterBias:.25, coverBias:.08, roadFlee:.00, panic:.06, kmph:1.2, cliffRisk:.01, nightPenalty:.40, fatigue:.10 },
-  fugitive:     { trailBias:.00, downBias:.35, waterBias:.20, coverBias:.95, roadFlee:.95, panic:.30, kmph:5.5, cliffRisk:.30, nightPenalty:.10, fatigue:.02 },
+  adult_male:   { trailBias:.68, downBias:.52, waterBias:.30, coverBias:.00, forestPenalty:.30, roadFlee:.00, panic:.12, kmph:3.8, cliffRisk:.08, nightPenalty:.25, fatigue:.04 },
+  adult_female: { trailBias:.74, downBias:.57, waterBias:.38, coverBias:.00, forestPenalty:.25, roadFlee:.00, panic:.10, kmph:3.2, cliffRisk:.04, nightPenalty:.28, fatigue:.05 },
+  child:        { trailBias:.15, downBias:.10, waterBias:.75, coverBias:.60, forestPenalty:.90, roadFlee:.00, panic:.65, kmph:1.6, cliffRisk:.25, nightPenalty:.55, fatigue:.08 },
+  elderly:      { trailBias:.95, downBias:.72, waterBias:.20, coverBias:.00, forestPenalty:.05, roadFlee:.00, panic:.04, kmph:1.2, cliffRisk:.01, nightPenalty:.45, fatigue:.12 },
+  fugitive:     { trailBias:.00, downBias:.35, waterBias:.20, coverBias:.95, forestPenalty:.00, roadFlee:.95, panic:.25, kmph:5.5, cliffRisk:.30, nightPenalty:.10, fatigue:.02 },
 }
 
 const WEATHER_SPEED: Record<Weather, number> = {
@@ -38,6 +37,13 @@ const WEATHER_SPEED: Record<Weather, number> = {
 }
 
 const DIRS8: [number,number][] = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]
+
+// Symbols considered "trail/road"
+const TRAIL_SYMS = new Set(['#', '=', 'f', 'R'])
+// Symbols considered dense cover (forest, plantation)
+const DENSE_COVER_SYMS = new Set(['T', 't', 'P'])
+// Completely impassable or very hard
+const HARD_SYMS = new Set(['|', '^', 'M'])
 
 export function findActualLocation(map: GameMap, sub: Subject, wx: Weather): { x:number; y:number } {
   const p = PROFILES[sub.type]
@@ -47,14 +53,10 @@ export function findActualLocation(map: GameMap, sub: Subject, wx: Weather): { x
 
   let cx = sub.lastSeenX, cy = sub.lastSeenY
 
-  // simulate hour by hour — deterministic
   for (let hour = 0; hour < sub.missingHours; hour++) {
-    // fatigue accumulates
     const fatigueMod = Math.max(0.3, 1 - p.fatigue * hour)
-    // night disorientation
     const nightMod = hour > 5 ? (1 - p.nightPenalty) : 1.0
     const effectiveKmph = p.kmph * speedMod * fatigueMod * nightMod
-    // steps per hour (each step ~50m)
     const steps = Math.max(1, Math.round(effectiveKmph * 1000 / 50))
 
     for (let step = 0; step < steps; step++) {
@@ -69,43 +71,66 @@ export function findActualLocation(map: GameMap, sub: Subject, wx: Weather): { x
         const t = tiles[ny][nx]
         if (!t.walkable && rng() > p.cliffRisk) continue
 
+        // Base weight from movement cost
         let w = 1 / (t.moveCost + 0.1)
 
-        // elevation: downhill preference
+        // ── Elevation: downhill preference ───────────────────────────────
         const de = ct.elev - t.elev
         if (de > 0) w *= 1 + p.downBias * Math.min(1, de / 200)
-        else w *= Math.max(0.05, 1 - p.downBias * Math.min(1, -de / 300))
+        else        w *= Math.max(0.05, 1 - p.downBias * Math.min(1, -de / 300))
 
-        // trail / road
-        if (t.sym === '#' || t.sym === '=' || t.sym === 'f' || t.sym === 'R') {
+        // ── Trail / road attraction ──────────────────────────────────────
+        if (TRAIL_SYMS.has(t.sym)) {
           if (p.roadFlee > 0.5) {
-            w *= (1 - p.roadFlee) * 0.03
+            // Fugitive: strongly avoid roads
+            w *= 0.02
           } else {
-            w *= 1 + p.trailBias * 4
+            // Everyone else: attracted to trails, elderly extremely so
+            w *= 1 + p.trailBias * 8
           }
         }
 
-        // water attraction (within 8 tiles)
-        if (t.waterDist < 8) w *= 1 + p.waterBias * (1 - t.waterDist / 8)
-
-        // village / town — all non-fugitives attracted
-        if ((t.sym === 'B' || t.sym === 'C') && p.roadFlee < 0.5) w *= 1 + 0.8
-
-        // cover (forest, plantation)
-        if (t.sym === 'T' || t.sym === 't' || t.sym === 'P') w *= 1 + p.coverBias * 2.5
-
-        // panic component — random zigzag
-        const panicLevel = Math.min(0.9, p.panic + hour * 0.015)
-        w *= (1 - panicLevel) + rng() * panicLevel * 2.5
-
-        // night: strong pull to paths, avoid steep
-        if (hour > 5) {
-          if (t.sym === '=' || t.sym === '#' || t.sym === 'f') w *= 1.6
-          if (t.slope > 30) w *= 0.5
+        // ── Dense forest / cover ─────────────────────────────────────────
+        if (DENSE_COVER_SYMS.has(t.sym)) {
+          if (p.coverBias > 0.5) {
+            // Fugitive / child: attracted to cover
+            w *= 1 + p.coverBias * 3
+          } else {
+            // Elderly / adults: hard penalty — they avoid thick forest
+            w *= p.forestPenalty
+          }
         }
 
-        // slope penalty — all people slow on steep terrain
-        w *= Math.max(0.05, 1 - t.slope / 100)
+        // ── Hard terrain: cliffs, peaks ──────────────────────────────────
+        if (HARD_SYMS.has(t.sym)) {
+          w *= p.cliffRisk * 0.1
+        }
+
+        // ── Water attraction ─────────────────────────────────────────────
+        if (t.waterDist < 8) w *= 1 + p.waterBias * (1 - t.waterDist / 8)
+
+        // ── Village / town: all non-fugitives attracted ──────────────────
+        if ((t.sym === 'B' || t.sym === 'C') && p.roadFlee < 0.5) w *= 2.5
+
+        // ── Road flee for fugitive ───────────────────────────────────────
+        if (p.roadFlee > 0.5 && (t.sym === 'B' || t.sym === 'C')) w *= 0.01
+
+        // ── Panic component — small random noise, capped ─────────────────
+        // Panic is now a small noise term, NOT able to dominate trail weights
+        const panicLevel = Math.min(0.5, p.panic + hour * 0.01)
+        const noise = 1 + (rng() - 0.5) * panicLevel
+        w *= Math.max(0.5, noise)
+
+        // ── Night: stronger pull to any path, penalise slope ─────────────
+        if (hour > 5) {
+          if (TRAIL_SYMS.has(t.sym)) w *= 2.0
+          if (t.slope > 25) w *= 0.4
+          // Dense forest at night is very bad for elderly/adults
+          if (DENSE_COVER_SYMS.has(t.sym) && p.forestPenalty < 0.5) w *= 0.3
+        }
+
+        // ── Slope penalty ────────────────────────────────────────────────
+        w *= Math.max(0.05, 1 - t.slope / 90)
 
         candidates.push({ nx, ny, w: Math.max(0.0001, w) })
       }
@@ -122,7 +147,6 @@ export function findActualLocation(map: GameMap, sub: Subject, wx: Weather): { x
   return { x: cx, y: cy }
 }
 
-// ─── Generate a deterministic "likely zone" radius for HUD display ────────────
 export function getPredictedZone(sub: Subject, wx: Weather): { radius:number; description:string } {
   const p = PROFILES[sub.type]
   const speed = WEATHER_SPEED[wx] * p.kmph
@@ -130,9 +154,9 @@ export function getPredictedZone(sub: Subject, wx: Weather): { radius:number; de
   const desc = sub.type === 'child'
     ? `Child: likely near water/shelter within ${maxDist} tiles. High randomness.`
     : sub.type === 'elderly'
-    ? `Elderly: very likely on trails, downhill within ${maxDist} tiles.`
+    ? `Elderly: very likely on trails/roads, downhill within ${maxDist} tiles. Avoids forest.`
     : sub.type === 'fugitive'
-    ? `Fugitive: deep cover, avoiding roads, within ${maxDist} tiles.`
+    ? `Fugitive: deep forest/cover, avoiding all roads, within ${maxDist} tiles.`
     : sub.type === 'adult_female'
     ? `Adult female: trail-following, downhill tendency, ${maxDist} tiles.`
     : `Adult male: moderate trail use, downhill, ${maxDist} tiles.`
